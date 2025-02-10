@@ -3,7 +3,7 @@ import cv2
 from ultralytics import solutions
 
 # Coba buka stream RTSP
-rtsp_url = "rtsp://admin:dcttotal2019@36.67.188.241:558/LiveChannel/2/media.smp"
+rtsp_url = "videos/traffic video.mp4"
 cap = cv2.VideoCapture(rtsp_url)  # Gunakan FFmpeg untuk kompatibilitas lebih baik
 
 # Cek apakah stream berhasil dibuka
@@ -25,7 +25,7 @@ region_points = [(60, 100), (360, 100), (360, 150), (60, 150)]  # Rectangle coun
 
 # Init ObjectCounter dari Ultralytics
 counter = solutions.ObjectCounter(
-    show=True,  # Tampilkan output
+    show=False,  # Tampilkan output
     region=region_points,
     model="yolo11n.pt",  # Model YOLO
     show_out=False,  # Hanya hitung objek yang masuk

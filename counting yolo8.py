@@ -1,41 +1,87 @@
-import ultralytics
 import cv2
-from ultralytics import solutions
+import time
+import mysql.connector
+from ultralytics import YOLO
+from collections import defaultdict
 
-cap = cv2.VideoCapture("D:/YOLO/videos/traffic video.mp4")
-assert cap.isOpened(), "Error reading video file"
-w, h, fps = (int(cap.get(x)) for x in (cv2.CAP_PROP_FRAME_WIDTH,
-                                       cv2.CAP_PROP_FRAME_HEIGHT,
-                                       cv2.CAP_PROP_FPS))
+# Konfigurasi database
+# conn = mysql.connector.connect(
+#     host='localhost',
+#     user='root',
+#     password='your_password',
+#     database='your_database'
+# )
+# cursor = conn.cursor()
 
-# Video writer
-# video_writer = cv2.VideoWriter("counting.avi",cv2.VideoWriter_fourcc(*"mp4v"), fps, (w, h))
+# Buat tabel jika belum ada
+# cursor.execute('''
+# CREATE TABLE IF NOT EXISTS vehicle_count (
+#     id INT AUTO_INCREMENT PRIMARY KEY,
+#     class VARCHAR(50),
+#     timestamp DATETIME
+# )
+# ''')
+# conn.commit()
 
-# Define region points
-# region_points = [(20, 400), (1080, 400)]  # For line counting
-region_points = [(60, 100), (360, 100), (360, 150), (60, 150)]  # For rectangle region counting
-# region_points = [(20, 400), (1080, 400), (1080, 360), (20, 360), (20, 400)]  # For polygon region counting
+# Load model YOLO
+model = YOLO('yolov8n.pt')  # Pastikan model tersedia di direktori yang benar
 
-# Init ObjectCounter
-counter = solutions.ObjectCounter(
-    show=True,  # Display the output
-    region=region_points,  # Pass region points
-    model="yolov8n.pt",  # model="yolo11n-obb.pt" for object counting using YOLO11 OBB model.
-    # classes=[0, 2],  # If you want to count specific classes i.e person and car with COCO pretrained model.
-    # show_in=True,  # Display in counts
-    # show_out=True,  # Display out counts
-    # line_width=2,  # Adjust the line width for bounding boxes and text display
-)
+# Buka video atau webcam
+cap = cv2.VideoCapture('videos/traffic video.mp4')  # Ganti dengan 0 untuk webcam
 
-# Process video
+# Posisi garis deteksi
+line_y = 150
+
+# Dictionary untuk menghitung jumlah kendaraan
+vehicle_count = defaultdict(int)
+
 while cap.isOpened():
-    success, im0 = cap.read()
-    if not success:
-        print("Video frame is empty or video processing has been successfully completed.")
+    ret, frame = cap.read()
+    if not ret:
         break
-    im0 = counter.count(im0)  # count the objects
-    # video_writer.write(im0)   # write the video frames
+    
+    frame_width = frame.shape[1]
+    line_x1 = 200
+    line_x2 = frame_width - 200
+    
+    # Deteksi objek
+    results = model(frame)
+    
+    for result in results:
+        for box in result.boxes:
+            x1, y1, x2, y2 = box.xyxy[0].tolist()
+            class_id = int(box.cls[0])
+            class_name = model.names[class_id]
+            center_y = (y1 + y2) / 2
+            
+            # Jika kendaraan melewati garis
+            if center_y > line_y - 5 and center_y < line_y + 5:
+                timestamp = time.strftime('%Y-%m-%d %H:%M:%S')
+                # cursor.execute('INSERT INTO vehicle_count (class, timestamp) VALUES (%s, %s)', (class_name, timestamp))
+                # conn.commit()
+                print(f'{class_name} melewati garis pada {timestamp}')
+                vehicle_count[class_name] += 1
+                
+                # Gambar kotak dan garis
+                cv2.rectangle(frame, (int(x1), int(y1)), (int(x2), int(y2)), (0, 255, 0), 2)
+                cv2.putText(frame, class_name, (int(x1), int(y1) - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+    
+    # Gambar garis deteksi
+    cv2.line(frame, (line_x1, line_y), (line_x2, line_y), (0, 0, 255), 2)
+    
+    # Tampilkan jumlah kendaraan di kanan atas
+    y_offset = 20
+    for class_name, count in vehicle_count.items():
+        cv2.putText(frame, f'{class_name}: {count}', (frame_width - 200, y_offset), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
+        y_offset += 20
+    
+    # Tampilkan frame
+    cv2.imshow('Vehicle Detection', frame)
+    if cv2.waitKey(1) & 0xFF == ord('q'):
+        break
 
-cap.release()   # Release the capture
-# video_writer.release()
+# Tutup koneksi dan video
+cap.release()
+# cursor.close()
+# conn.close()
 cv2.destroyAllWindows()
